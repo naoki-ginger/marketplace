@@ -1,18 +1,21 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./SafeMath.sol";
-import "./Math.sol";
-import "./SafeERC20.sol";
-import "./IERC20.sol";
-import "./IERC721Receiver.sol";
-import "./IERC721.sol";
-import "./Counters.sol";
-import "./Ownable.sol";
-import "./EnumerableSet.sol";
+import "./util/SafeMath.sol";
+import "./util/Math.sol";
+import "./util/SafeERC20.sol";
+import "./util/IERC20.sol";
+import "./util/IERC721Receiver.sol";
+import "./util/IERC721.sol";
+import "./util/Counters.sol";
+import "./util/Ownable.sol";
+import "./util/EnumerableSet.sol";
 import "./IMarket.sol";
+import "./util/ERC1155Holder.sol";
+import "./util/ERC721Holder.sol";
+import "./util/IERC1155.sol";
 
-contract MyMarket is IMarket, IERC721Receiver, Ownable {
+contract MyMarket is IMarket, Ownable, ERC1155Holder, ERC721Holder {
     using SafeMath for uint256;
     using Math for uint256;
     using SafeERC20 for IERC20;
@@ -36,79 +39,88 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
         tradeFeeRate = newTradeFeeRate;
     }
 
-    function onERC721Received(
-        address operator,
-        address from,
-        uint256 tokenId,
-        bytes calldata data
-    ) public pure override returns (bytes4) {
-        return this.onERC721Received.selector;
-    }
-
     function createOrder(
-        uint256 orderType,
+        OrderType orderType,
+        NFTType nftType,
         address nftToken,
         uint256 tokenId,
+        uint256 tokenAmount,
         address token,
         uint256 price,
         uint256 timeLimit,
-        uint256 leastPercent
+        uint256 changeRate,
+        uint256 minPrice
     ) external override returns (uint256) {
+        require(price > 0, "Price invalid");
+        require(timeLimit > 0, "TimeLimit invalid");
+        // require(orderType >= 1 && orderType <= 3, "OrderType invalid");
+        // verify changeRate and minPrice
+        if (orderType == OrderType.Buy || orderType == OrderType.Sell) {
+            changeRate = 0;
+            minPrice = 0;
+        } else if (orderType == OrderType.Auction) {
+            require(changeRate > 0, "ChangeRate invalid");
+            minPrice = 0;
+        } else if (orderType == OrderType.DutchAuction) {
+            require(changeRate > 0, "ChangeRate invalid");
+            require(minPrice > 0 && minPrice < price, "MinPrice invalid");
+        }
+
         _orderCounter.increment();
         uint256 orderId = _orderCounter.current();
+        NftInfo memory nftInfo = NftInfo({
+            nftType: nftType,
+            nftToken: nftToken,
+            tokenId: tokenId,
+            tokenAmount: tokenAmount
+        });
         Order memory order = Order({
             id: orderId,
             orderType: orderType,
             orderOwner: msg.sender,
+            nftInfo: nftInfo,
             token: token,
             price: price,
-            nftToken: nftToken,
-            tokenId: tokenId,
             startTime: block.timestamp,
             endTime: block.timestamp + timeLimit * 1 days,
-            leastPercent: leastPercent
+            changeRate: changeRate,
+            minPrice: minPrice
         });
 
-        require(price > 0, "Price invalid");
-        require(timeLimit > 0, "TimeLimit invalid");
-        require(orderType >= 1 && orderType <= 3, "OrderType invalid");
+        // token amount is always 1 for erc721
+        if (nftType == NFTType.ERC721) {
+            order.nftInfo.tokenAmount = 1;
+        }
         // lock asset
-        if (orderType == 1) {
-            order.leastPercent = 0;
-            _safeTransferERC721(
-                order.nftToken,
-                msg.sender,
-                address(this),
-                order.tokenId
-            );
-        } else if (orderType == 2) {
-            order.leastPercent = 0;
+        if (orderType == OrderType.Buy) {
             _safeTransferERC20(
                 order.token,
                 msg.sender,
                 address(this),
                 order.price
             );
-        } else if (orderType == 3) {
-            require(leastPercent > 0, "LeastPercent invalid");
+        } else if (nftType == NFTType.ERC721) {
             _safeTransferERC721(
-                order.nftToken,
+                order.nftInfo.nftToken,
                 msg.sender,
                 address(this),
-                order.tokenId
+                order.nftInfo.tokenId
+            );
+        } else {
+            _safeTransferERC1155(
+                order.nftInfo.nftToken,
+                msg.sender,
+                address(this),
+                order.nftInfo.tokenId,
+                order.nftInfo.tokenAmount
             );
         }
+
         emit CreateOrder(
             order.id,
-            orderType,
+            uint256(order.orderType),
             order.orderOwner,
-            nftToken,
-            tokenId,
-            token,
-            price,
-            order.startTime,
-            order.endTime,
-            leastPercent
+            order
         );
         _addOrder(order);
         return order.id;
@@ -140,32 +152,52 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
         IERC721(nftToken).safeTransferFrom(from, to, tokenId);
     }
 
+    function _safeTransferERC1155(
+        address nftToken,
+        address from,
+        address to,
+        uint256 id,
+        uint256 amount
+    ) internal {
+        uint256 balance = IERC1155(nftToken).balanceOf(from, id);
+        require(balance >= amount, "ERC1155 balance insufficient");
+        IERC1155(nftToken).safeTransferFrom(from, to, id, amount, "");
+    }
+
     function _addOrder(Order memory order) private {
         orderStorage[order.id] = order;
         _orderIds[order.orderOwner].add(order.id);
-        _nftOrderIds[order.nftToken][order.tokenId].add(order.id);
+        _nftOrderIds[order.nftInfo.nftToken][order.nftInfo.tokenId].add(
+            order.id
+        );
     }
 
     function _deleteOrder(Order memory order) private {
         delete orderStorage[order.id];
         _orderIds[order.orderOwner].remove(order.id);
-        _nftOrderIds[order.nftToken][order.tokenId].remove(order.id);
+        _nftOrderIds[order.nftInfo.nftToken][order.nftInfo.tokenId].remove(
+            order.id
+        );
     }
 
     function changeOrder(
         uint256 orderId,
         uint256 price,
-        uint256 timeLimit,
-        uint256 leastPercent
+        uint256 timeLimit
     ) external override {
         Order memory order = orderStorage[orderId];
         require(order.id > 0, "Order not exist");
         require(order.orderOwner == msg.sender, "Order owner not match");
         require(price > 0, "Price invalid");
         require(timeLimit > 0, "TimeLimit invalid");
+        require(
+            order.orderType != OrderType.Auction &&
+                order.orderType != OrderType.DutchAuction,
+            "Auction or DutchAuction change is not allowed"
+        );
 
         // change locked token
-        if (order.orderType == 2 && order.price != price) {
+        if (order.orderType == OrderType.Buy && order.price != price) {
             if (price > order.price) {
                 _safeTransferERC20(
                     order.token,
@@ -183,24 +215,16 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
             }
         }
 
-        if (order.orderType == 3) {
-            require(leastPercent > 0, "LeastPercent invalid");
-        }
-
         order.price = price;
         order.endTime = block.timestamp + timeLimit * 1 days;
-        order.leastPercent = leastPercent;
         emit ChangeOrder(
             order.id,
-            order.orderType,
+            uint256(order.orderType),
             order.orderOwner,
-            order.nftToken,
-            order.tokenId,
             order.token,
             order.price,
             order.startTime,
-            order.endTime,
-            order.leastPercent
+            order.endTime
         );
         orderStorage[order.id] = order;
     }
@@ -209,39 +233,45 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
         Order memory order = orderStorage[orderId];
         require(order.id > 0, "Order not exist");
         require(order.orderOwner == msg.sender, "Order owner not match");
-        // unlock asset
-        if (order.orderType == 1) {
-            _safeTransferERC721(
-                order.nftToken,
-                address(this),
-                order.orderOwner,
-                order.tokenId
-            );
-        } else if (order.orderType == 2) {
+        if (order.orderType == OrderType.Auction) {
+            // check bid info
+            BidInfo memory bidInfo = bidStorage[orderId];
+            require(bidInfo.price == 0, "Bid should be Null");
+        }
+        if (order.orderType == OrderType.Buy) {
+            // unlock token
             _safeTransferERC20(
                 order.token,
                 address(this),
                 order.orderOwner,
                 order.price
             );
-        } else if (order.orderType == 3) {
-            // check bid info
-            BidInfo memory bidInfo = bidStorage[orderId];
-            require(bidInfo.price == 0, "Bid should be Null");
-            _safeTransferERC721(
-                order.nftToken,
-                address(this),
-                order.orderOwner,
-                order.tokenId
-            );
+        } else {
+            // unlock nft
+            if (order.nftInfo.nftType == NFTType.ERC721) {
+                _safeTransferERC721(
+                    order.nftInfo.nftToken,
+                    address(this),
+                    order.orderOwner,
+                    order.nftInfo.tokenId
+                );
+            } else {
+                _safeTransferERC1155(
+                    order.nftInfo.nftToken,
+                    address(this),
+                    order.orderOwner,
+                    order.nftInfo.tokenId,
+                    order.nftInfo.tokenAmount
+                );
+            }
         }
 
         emit CancelOrder(
             order.id,
-            order.orderType,
+            uint256(order.orderType),
             order.orderOwner,
-            order.nftToken,
-            order.tokenId
+            order.nftInfo.nftToken,
+            order.nftInfo.tokenId
         );
         _deleteOrder(order);
     }
@@ -249,30 +279,31 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
     function fulfillOrder(uint256 orderId, uint256 price) external override {
         Order memory order = orderStorage[orderId];
         require(order.id > 0, "Order not exist");
-        require(order.price == price, "Price not match");
-        require(block.timestamp <= order.endTime, "Order expired");
         require(
-            order.orderType >= 1 && order.orderType <= 2,
-            "OrderType invalid"
+            order.price == price ||
+                (order.orderType == OrderType.DutchAuction &&
+                    price == getDutchPrice(order.id)),
+            "Price not match"
         );
-        if (order.orderType == 1) {
+        require(block.timestamp <= order.endTime, "Order expired");
+        require(order.orderType != OrderType.Auction, "OrderType invalid");
+        // use new price for Dutch Auction
+        order.price = price;
+        if (
+            order.orderType == OrderType.Sell ||
+            order.orderType == OrderType.DutchAuction
+        ) {
             _payToken(order);
-        } else if (order.orderType == 2) {
+        } else if (order.orderType == OrderType.Buy) {
             _payNft(order);
         }
 
         emit CompleteOrder(
             order.id,
-            order.orderType,
+            uint256(order.orderType),
             order.orderOwner,
             msg.sender,
-            order.nftToken,
-            order.tokenId,
-            order.token,
-            order.price,
-            order.startTime,
-            order.endTime,
-            order.leastPercent
+            order
         );
         _deleteOrder(order);
     }
@@ -286,21 +317,41 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
             order.orderOwner,
             order.price.sub(fee)
         );
-        _safeTransferERC721(
-            order.nftToken,
-            address(this),
-            msg.sender,
-            order.tokenId
-        );
+        if (order.nftInfo.nftType == NFTType.ERC721) {
+            _safeTransferERC721(
+                order.nftInfo.nftToken,
+                address(this),
+                msg.sender,
+                order.nftInfo.tokenId
+            );
+        } else {
+            _safeTransferERC1155(
+                order.nftInfo.nftToken,
+                address(this),
+                msg.sender,
+                order.nftInfo.tokenId,
+                order.nftInfo.tokenAmount
+            );
+        }
     }
 
     function _payNft(Order memory order) internal {
-        _safeTransferERC721(
-            order.nftToken,
-            msg.sender,
-            order.orderOwner,
-            order.tokenId
-        );
+        if (order.nftInfo.nftType == NFTType.ERC721) {
+            _safeTransferERC721(
+                order.nftInfo.nftToken,
+                msg.sender,
+                order.orderOwner,
+                order.nftInfo.tokenId
+            );
+        } else {
+            _safeTransferERC1155(
+                order.nftInfo.nftToken,
+                msg.sender,
+                order.orderOwner,
+                order.nftInfo.tokenId,
+                order.nftInfo.tokenAmount
+            );
+        }
         uint256 fee = order.price.mul(tradeFeeRate).div(rateBase);
         _safeTransferERC20(order.token, address(this), owner(), fee);
         _safeTransferERC20(
@@ -316,13 +367,13 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
         require(order.id > 0, "Order not exist");
         require(price >= order.price, "Price needs to exceed reserve price");
         require(block.timestamp <= order.endTime, "Order expired");
-        require(order.orderType == 3, "OrderType invalid");
+        require(order.orderType == OrderType.Auction, "OrderType invalid");
         BidInfo memory currentBid = bidStorage[orderId];
         if (currentBid.price > 0) {
             require(
                 price >=
                     currentBid.price.add(
-                        currentBid.price.mul(order.leastPercent).div(rateBase)
+                        currentBid.price.mul(order.changeRate).div(rateBase)
                     ),
                 "Bid price low"
             );
@@ -345,14 +396,12 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
 
         emit Bid(
             order.id,
-            order.orderType,
+            uint256(order.orderType),
             order.orderOwner,
             msg.sender,
             block.timestamp,
             order.token,
-            order.price,
-            order.nftToken,
-            order.tokenId
+            order.price
         );
         bidStorage[order.id] = bidInfo;
     }
@@ -361,7 +410,7 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
         Order memory order = orderStorage[orderId];
         require(order.id > 0, "Order not exist");
         require(block.timestamp > order.endTime, "Order is in auction time");
-        require(order.orderType == 3, "OrderType invalid");
+        require(order.orderType == OrderType.Auction, "OrderType invalid");
         BidInfo memory currentBid = bidStorage[orderId];
         require(currentBid.price > 0, "Bid not exist");
         require(
@@ -378,24 +427,18 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
             currentBid.price.sub(fee)
         );
         _safeTransferERC721(
-            order.nftToken,
+            order.nftInfo.nftToken,
             address(this),
             currentBid.bidder,
-            order.tokenId
+            order.nftInfo.tokenId
         );
-
+        order.price = currentBid.price;
         emit CompleteOrder(
             order.id,
-            order.orderType,
+            uint256(order.orderType),
             order.orderOwner,
-            currentBid.bidder,
-            order.nftToken,
-            order.tokenId,
-            order.token,
-            currentBid.price,
-            order.startTime,
-            order.endTime,
-            order.leastPercent
+            msg.sender,
+            order
         );
         delete bidStorage[order.id];
         _deleteOrder(order);
@@ -418,6 +461,30 @@ contract MyMarket is IMarket, IERC721Receiver, Ownable {
         returns (Order memory)
     {
         return orderStorage[orderId];
+    }
+
+    function getDutchPrice(uint256 orderId)
+        public
+        view
+        override
+        returns (uint256)
+    {
+        Order memory order = orderStorage[orderId];
+        require(order.id > 0, "Order not exist");
+        require(
+            order.orderType == OrderType.DutchAuction,
+            "Order type invalid"
+        );
+        uint256 oneHour = 1 hours;
+        uint256 decreasePrice = order
+            .price
+            .mul(order.changeRate)
+            .mul(block.timestamp.sub(order.startTime).div(oneHour))
+            .div(rateBase);
+        if (decreasePrice.add(order.minPrice) > order.price) {
+            return order.minPrice;
+        }
+        return order.price.sub(decreasePrice);
     }
 
     function getBidInfo(uint256 orderId)

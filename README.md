@@ -6,7 +6,20 @@
 
 竞价拍卖：卖方设定一个起始拍卖价格以及拍卖时间，在拍卖时间内任意用户可以出价，当出价高于之前用户出价时记为有效。拍卖时间结束后，价格最高的用户可以领取货物。
 
-# 结构体定义
+# 类型定义
+
+## OrderType
+枚举值，表示订单类型
+
+1. **Sell**：直卖单
+2. **Buy**：求购单
+3. **Auction**：英式拍卖单
+4. **DutchAuction**：荷式拍卖单
+
+## NFTType
+枚举值，表示nft类型
+1. **ERC721**：ERC721类型
+2. **ERC1155**：ERC1155类型
 
 ## Order
 订单详情
@@ -32,23 +45,33 @@
 | address  | bidder | 最高出价者地址|
 | uint256  | price |  最高出价|
 
+## NFTType
+NFT详细信息
 
+|  数据类型   | 变量名  | 描述 |
+|  ----  | ----  |  ---- |
+| NFTType  | nftType | nft类型，0：erc721，1：erc1155|
+| address  | nftToken |  nft合约地址|
+| uint256  | tokenId | nft的tokenId|
+| uint256  | tokenAmount |  对于erc721型nft，该值为1|
 # API
-
 ## 写方法
 
 ### **createOrder**
-创建订单，包括创建直卖单、求购单、竞拍单。
+创建订单，包括创建直卖单、求购单、英式竞拍单，荷式竞拍单。
 
 
 Parameters
--   `(uint256)`    订单类型，1: 直卖单；2:求购单；3:竞拍单
+-   `(uint256)`    订单类型，1: 直卖单；2:求购单；3:英式竞拍单；4: 荷式竞拍单
+-   `(NFTType)`    nft类型，ERC721/ERC1155
 -   `(address)`    交易的nft的合约哈希
 -   `(uint256)`    nft的tokenId
+-   `(uint256)`    token数量，对于ERC721型nft，该值为1
 -   `(address)`    用于支付的erc20代币的合约哈希
 -   `(uint256)`    支付的erc20的数量
--   `(uint256)`   订单的有效期，单位：天
--   `(uint256)`   订单为竞拍单时，每次加价的最低比例
+-   `(uint256)`    订单的有效期，单位：天
+-   `(uint256)`    英式竞拍单时，为最低加价比例；荷式竞拍单时，为每小时减价的比例
+-   `(uint256)`    荷式竞拍单生效，为最低价
 
 Returns
 -   无
@@ -67,7 +90,7 @@ Returns
 ### **fulfillOrder**
 完成订单
 
-注：只能成交直买直卖的订单
+注：只能成交直卖单、求购单、荷式竞拍单
 
 Parameters
 -   `(uint256)`    订单编号Id
@@ -79,17 +102,20 @@ Returns
 ### **changeOrder**
 修改订单信息
 
+注：只能修改直卖单、求购单
+
 Parameters
 -   `(uint256)`    订单编号Id
 -   `(uint256)`    支付的erc20的金额
--   `(uint256)`   订单的有效期，单位：天
--   `(uint256)`   订单为竞拍单时，每次加价的最低比例
+-   `(uint256)`    订单的有效期，单位：天
 
 Returns
 -   无
 
 ### **bid**
 参与竞拍
+
+注：只能用于英式竞拍
 
 Parameters
 -   `(uint256)`    订单编号Id
@@ -100,6 +126,8 @@ Returns
 
 ### **claim**
 竞拍完成后，领取nft
+
+注：只能用于英式竞拍
 
 Parameters
 -   `(uint256)`    订单编号Id
@@ -132,6 +160,14 @@ Parameters
 
 Returns
 -   `Order` 订单详情
+
+### **getDutchPrice**
+
+Parameters
+-   `uint256` 订单编号Id
+
+Returns
+-   `uint256` 获取荷式竞拍单当前的竞拍价
 
 ### **getBidInfo**
 

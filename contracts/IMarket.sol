@@ -3,30 +3,33 @@
 pragma solidity ^0.8.0;
 
 interface IMarket {
+    enum OrderType {
+        Sell, // sell nft
+        Buy, // buy nft
+        Auction, // aution
+        DutchAuction // dutch aution
+    }
+
+    enum NFTType {
+        ERC721, // ERC721
+        ERC1155 // ERC1155
+    }
+
     event CreateOrder(
         uint256 indexed id,
         uint256 indexed orderType,
         address indexed orderOwner,
-        address nftToken,
-        uint256 tokenId,
-        address token,
-        uint256 price,
-        uint256 startTime,
-        uint256 endTime,
-        uint256 leastPercent
+        Order order
     );
 
     event ChangeOrder(
         uint256 indexed id,
         uint256 indexed orderType,
         address indexed orderOwner,
-        address nftToken,
-        uint256 tokenId,
         address token,
         uint256 price,
         uint256 startTime,
-        uint256 endTime,
-        uint256 leastPercent
+        uint256 endTime
     );
 
     event CompleteOrder(
@@ -34,13 +37,7 @@ interface IMarket {
         uint256 indexed orderType,
         address indexed orderOwner,
         address payer,
-        address nftToken,
-        uint256 tokenId,
-        address token,
-        uint256 price,
-        uint256 startTime,
-        uint256 endTime,
-        uint256 leastPercent
+        Order order
     );
 
     event CancelOrder(
@@ -58,22 +55,27 @@ interface IMarket {
         address bidder,
         uint256 bidTime,
         address token,
-        uint256 price,
-        address nftToken,
-        uint256 tokenId
+        uint256 price
     );
 
     struct Order {
         uint256 id; //order id
-        uint256 orderType; // 1: sell nft, 2: buy nft, 3: auction
-        address orderOwner; //order owner
-        address token; //pa token address
+        OrderType orderType; // 0: sell nft, 1: buy nft, 2: auction, 3: dutch auction
+        address orderOwner; // order owner
+        NftInfo nftInfo; // nft info
+        address token; // ERC20 token address
         uint256 price; //order price
-        address nftToken; //nft token address
-        uint256 tokenId; // token id
         uint256 startTime; // order start timestimp
         uint256 endTime; // order end timestimp
-        uint256 leastPercent; // least Percent for auction
+        uint256 changeRate; // least percent for auction, decrease percent every hour for dutch auction
+        uint256 minPrice; // min price for dutch auction
+    }
+
+    struct NftInfo {
+        NFTType nftType; // 0: ERC721, 1: ERC1155
+        address nftToken; //nft token address
+        uint256 tokenId; // token id
+        uint256 tokenAmount; // token amount, for ERC721 is always 1
     }
 
     struct BidInfo {
@@ -85,6 +87,8 @@ interface IMarket {
     function name() external pure returns (string memory);
 
     function getTradeFeeRate() external view returns (uint256);
+
+    function getDutchPrice(uint256 orderId) external view returns (uint256);
 
     function getOrder(uint256 orderId) external view returns (Order memory);
 
@@ -102,13 +106,16 @@ interface IMarket {
 
     // write methods
     function createOrder(
-        uint256 orderType,
+        OrderType orderType,
+        NFTType nftType,
         address nftToken,
         uint256 tokenId,
+        uint256 tokenAmount,
         address token,
         uint256 price,
         uint256 timeLimit,
-        uint256 leastPercent
+        uint256 changeRate,
+        uint256 minPrice
     ) external returns (uint256);
 
     function cancelOrder(uint256 orderId) external;
@@ -118,8 +125,7 @@ interface IMarket {
     function changeOrder(
         uint256 orderId,
         uint256 price,
-        uint256 timeLimit,
-        uint256 leastPercent
+        uint256 timeLimit
     ) external;
 
     function bid(uint256 orderId, uint256 price) external;
