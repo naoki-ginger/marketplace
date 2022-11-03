@@ -27,15 +27,15 @@
 |  数据类型   | 变量名  | 描述 |
 |  ----  | ----  |  ---- |
 | uint256  | id | 订单编号，自增|
-| uint256  | orderType |  订单类型，1: 直卖单；2:求购单；3:竞拍单|
+| OrderType  | orderType |  订单类型，0: 直卖单；1:求购单；2:英式竞拍单；3: 荷式竞拍单|
 | address  | orderOwner | 订单创建者地址|
 | address  | token| 用于支付的erc20的代币哈希 |
 | uint256  | price | 支付的erc20代币数量|
-| address  | nftToken | 交易nft的合约哈希|
-| uint256  | tokenId |  nft的tokenId|
+| NftInfo  | nftInfo |  nft信息|
 | uint256  | startTime | 订单的开始时间|
 | uint256  | endTime| 订单的截止时间 |
-| uint256  | leastPercent  | 竞拍时加价的最低比例|
+| uint256  | changeRate  | 英式竞拍时加价的最低比例，荷式竞拍事每小时价格降低的比例|
+| uint256  | minPrice| 荷式竞拍的最低价 |
 
 ## BidInfo
 当前最高出价信息
@@ -45,7 +45,7 @@
 | address  | bidder | 最高出价者地址|
 | uint256  | price |  最高出价|
 
-## NFTType
+## NFTInfo
 NFT详细信息
 
 |  数据类型   | 变量名  | 描述 |
@@ -193,11 +193,3 @@ Parameters
 
 Returns
 -   `Order[]` nft相关的订单详情列表
-
-
-
-
-
-
-
-
