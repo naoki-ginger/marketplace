@@ -82,7 +82,7 @@ contract MyMarket is IMarket, Ownable, ERC1155Holder, ERC721Holder {
             token: token,
             price: price,
             startTime: block.timestamp,
-            endTime: block.timestamp + timeLimit * 1 days,
+            endTime: block.timestamp.add(timeLimit),
             changeRate: changeRate,
             minPrice: minPrice
         });
@@ -216,7 +216,7 @@ contract MyMarket is IMarket, Ownable, ERC1155Holder, ERC721Holder {
         }
 
         order.price = price;
-        order.endTime = block.timestamp + timeLimit * 1 days;
+        order.endTime = block.timestamp.add(timeLimit);
         emit ChangeOrder(
             order.id,
             uint256(order.orderType),
