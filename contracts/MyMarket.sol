@@ -401,7 +401,7 @@ contract MyMarket is IMarket, Ownable, ERC1155Holder, ERC721Holder {
             msg.sender,
             block.timestamp,
             order.token,
-            order.price
+            bidInfo.price
         );
         bidStorage[order.id] = bidInfo;
     }
@@ -426,12 +426,22 @@ contract MyMarket is IMarket, Ownable, ERC1155Holder, ERC721Holder {
             order.orderOwner,
             currentBid.price.sub(fee)
         );
-        _safeTransferERC721(
-            order.nftInfo.nftToken,
-            address(this),
-            currentBid.bidder,
-            order.nftInfo.tokenId
-        );
+        if (order.nftInfo.nftType == NFTType.ERC721) {
+            _safeTransferERC721(
+                order.nftInfo.nftToken,
+                address(this),
+                currentBid.bidder,
+                order.nftInfo.tokenId
+            );
+        } else {
+            _safeTransferERC1155(
+                order.nftInfo.nftToken,
+                address(this),
+                currentBid.bidder,
+                order.nftInfo.tokenId,
+                order.nftInfo.tokenAmount
+            );
+        }
         order.price = currentBid.price;
         emit CompleteOrder(
             order.id,
