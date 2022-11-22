@@ -413,10 +413,6 @@ contract MyMarket is IMarket, Ownable, ERC1155Holder, ERC721Holder {
         require(order.orderType == OrderType.Auction, "OrderType invalid");
         BidInfo memory currentBid = bidStorage[orderId];
         require(currentBid.price > 0, "Bid not exist");
-        require(
-            msg.sender == order.orderOwner || msg.sender == currentBid.bidder,
-            "Only order owner or bidder can claim"
-        );
 
         uint256 fee = currentBid.price.mul(tradeFeeRate).div(rateBase);
         _safeTransferERC20(order.token, address(this), owner(), fee);
