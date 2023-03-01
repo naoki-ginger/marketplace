@@ -7,7 +7,8 @@ interface IMarket {
         Sell, // sell nft
         Buy, // buy nft
         Auction, // aution
-        DutchAuction // dutch aution
+        DutchAuction, // dutch aution
+        BuyCollection // buy nft collention
     }
 
     enum NFTType {
@@ -37,6 +38,7 @@ interface IMarket {
         uint256 indexed orderType,
         address indexed orderOwner,
         address payer,
+        uint256 finalPrice,
         Order order
     );
 
@@ -60,7 +62,7 @@ interface IMarket {
 
     struct Order {
         uint256 id; //order id
-        OrderType orderType; // 0: sell nft, 1: buy nft, 2: auction, 3: dutch auction
+        OrderType orderType; // 0: sell nft, 1: buy nft, 2: auction, 3: dutch auction, 4: buy collection
         address orderOwner; // order owner
         NftInfo nftInfo; // nft info
         address token; // ERC20 token address
@@ -116,19 +118,25 @@ interface IMarket {
         uint256 timeLimit,
         uint256 changeRate,
         uint256 minPrice
-    ) external returns (uint256);
+    ) external payable returns (uint256);
 
     function cancelOrder(uint256 orderId) external;
 
-    function fulfillOrder(uint256 orderId, uint256 price) external;
+    function fulfillOrder(
+        uint256 orderId,
+        uint256 price,
+        uint256 tokenId
+    ) external payable;
 
     function changeOrder(
         uint256 orderId,
         uint256 price,
         uint256 timeLimit
-    ) external;
+    ) external payable;
 
-    function bid(uint256 orderId, uint256 price) external;
+    function bid(uint256 orderId, uint256 price) external payable;
 
-    function claim(uint256 orderId) external;
+    function endOrder(uint256 orderId) external;
+
+    function cancelAll() external;
 }
