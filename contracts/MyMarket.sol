@@ -231,7 +231,7 @@ contract MyMarket is IMarket, Ownable, ERC1155Holder, ERC721Holder {
     fallback() external payable {}
 
     function setTradeFeeRate(uint256 newTradeFeeRate) external onlyOwner {
-        require(tradeFeeRate <= 2000, "Trade fee rate exceed limit");
+        require(newTradeFeeRate <= 2000, "Trade fee rate exceed limit");
         tradeFeeRate = newTradeFeeRate;
     }
 
