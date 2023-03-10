@@ -11,15 +11,16 @@
 ## OrderType
 枚举值，表示订单类型
 
-1. **Sell**：直卖单
-2. **Buy**：求购单
-3. **Auction**：英式拍卖单
-4. **DutchAuction**：荷式拍卖单
+0. **Sell**：直卖单
+1. **Buy**：求购单
+2. **Auction**：英式拍卖单
+3. **DutchAuction**：荷式拍卖单
+4. **Buy Collection**：集合求购单
 
 ## NFTType
 枚举值，表示nft类型
-1. **ERC721**：ERC721类型
-2. **ERC1155**：ERC1155类型
+0. **ERC721**：ERC721类型
+1. **ERC1155**：ERC1155类型
 
 ## Order
 订单详情
@@ -27,14 +28,14 @@
 |  数据类型   | 变量名  | 描述 |
 |  ----  | ----  |  ---- |
 | uint256  | id | 订单编号，自增|
-| OrderType  | orderType |  订单类型，0: 直卖单；1:求购单；2:英式竞拍单；3: 荷式竞拍单|
+| OrderType  | orderType |  订单类型，0: 直卖单；1:求购单；2:英式竞拍单；3: 荷式竞拍单；4：集合求购单|
 | address  | orderOwner | 订单创建者地址|
-| address  | token| 用于支付的erc20的代币哈希 |
-| uint256  | price | 支付的erc20代币数量|
+| address  | token| 用于支付的erc20的代币哈希，或用address(0)代表链原生币|
+| uint256  | price | 支付的erc20代币数量，或链原生币数量|
 | NftInfo  | nftInfo |  nft信息|
 | uint256  | startTime | 订单的开始时间|
 | uint256  | endTime| 订单的截止时间 |
-| uint256  | changeRate  | 英式竞拍时加价的最低比例，荷式竞拍事每小时价格降低的比例|
+| uint256  | changeRate  | 英式竞拍时加价的最低比例，荷式竞拍时每小时价格降低的比例|
 | uint256  | minPrice| 荷式竞拍的最低价 |
 
 ## BidInfo
@@ -58,20 +59,20 @@ NFT详细信息
 ## 写方法
 
 ### **createOrder**
-创建订单，包括创建直卖单、求购单、英式竞拍单，荷式竞拍单。
+创建订单，包括创建直卖单、求购单、英式竞拍单，荷式竞拍单，集合求购单。
 
 
 Parameters
--   `(uint256)`    订单类型，1: 直卖单；2:求购单；3:英式竞拍单；4: 荷式竞拍单
+-   `(uint256)`    订单类型，0: 直卖单；1:求购单；2:英式竞拍单；3: 荷式竞拍单；4：集合求购单
 -   `(NFTType)`    nft类型，ERC721/ERC1155
 -   `(address)`    交易的nft的合约哈希
 -   `(uint256)`    nft的tokenId
 -   `(uint256)`    token数量，对于ERC721型nft，该值为1
--   `(address)`    用于支付的erc20代币的合约哈希
--   `(uint256)`    支付的erc20的数量
--   `(uint256)`    订单的有效期，单位：秒
+-   `(address)`    用于支付的erc20代币的合约哈希，或用address(0)代表链原生币
+-   `(uint256)`    支付的erc20的数量，或链原生币数量
+-   `(uint256)`    订单的有效期长度，单位：秒
 -   `(uint256)`    英式竞拍单时，为最低加价比例；荷式竞拍单时，为每小时减价的比例
--   `(uint256)`    荷式竞拍单生效，为最低价
+-   `(uint256)`    荷式竞拍的最低价
 
 Returns
 -   无
@@ -90,11 +91,12 @@ Returns
 ### **fulfillOrder**
 完成订单
 
-注：只能成交直卖单、求购单、荷式竞拍单
+注：只能成交直卖单、求购单、荷式竞拍单、集合求购单
 
 Parameters
 -   `(uint256)`    订单编号Id
--   `(uint256)`    支付的erc20的金额
+-   `(uint256)`    支付的erc20的金额，或链原生币数量
+-   `(uint256)`    交易的nft tokenId
 
 Returns
 -   无
@@ -102,11 +104,11 @@ Returns
 ### **changeOrder**
 修改订单信息
 
-注：只能修改直卖单、求购单
+注：只能修改直卖单、求购单、集合求购单
 
 Parameters
 -   `(uint256)`    订单编号Id
--   `(uint256)`    支付的erc20的金额
+-   `(uint256)`    支付的erc20的金额，或链原生币数量
 -   `(uint256)`    订单的有效期，单位：秒
 
 Returns
@@ -119,18 +121,29 @@ Returns
 
 Parameters
 -   `(uint256)`    订单编号Id
--   `(uint256)`    支付的erc20的金额
+-   `(uint256)`    支付的erc20的金额，或链原生币数量
 
 Returns
 -   无
 
-### **claim**
-竞拍完成后，领取nft
+### **endOrder**
+对于已过期订单，任意地址均可调用该方法彻底结束该订单
 
-注：只能用于英式竞拍
+注：已有人出价的英式竞拍单，会将nft发给竞拍成功者
 
 Parameters
 -   `(uint256)`    订单编号Id
+
+Returns
+-   无
+
+### **cancelAll**
+取消所有订单，只有合约owner可调用
+
+注：对于已过期且已有人出价的英式竞拍单，会将nft发给竞拍成功者
+
+Parameters
+-   无
 
 Returns
 -   无
